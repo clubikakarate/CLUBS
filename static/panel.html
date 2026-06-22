@@ -328,7 +328,14 @@ header{background:var(--p);padding:12px 20px;display:flex;align-items:center;gap
       </div>
       <div class="edad-hint" id="edad-hint" hidden>🎂 Edad calculada: <strong id="edad-val">—</strong> años</div>
     </div>
-    <div class="mfoot">
+    <div class="mfoot" style="display:flex;gap:8px;align-items:center">
+      <button id="btn-del-afil" onclick="eliminarAfiliado()"
+              style="display:none;background:#DC2626;color:#fff;border:none;padding:9px 14px;
+                     border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;
+                     font-family:inherit;white-space:nowrap">
+        🗑 Eliminar
+      </button>
+      <div style="flex:1"></div>
       <button class="btn-c" onclick="closeModal('m-afil')">Cancelar</button>
       <button class="btn" id="btn-afil" onclick="enviarAfiliado()">✅ Guardar</button>
     </div>
@@ -383,6 +390,7 @@ function closeModal(id){
     g(id).querySelectorAll('input').forEach(e=>e.value='');
     g(id).querySelectorAll('select').forEach(e=>e.selectedIndex=0);
     g('edad-hint').hidden=true;EDITANDO_ID=null;
+    g('btn-del-afil').style.display='none';
   }
   if(id==='m-hist'){g('h-plt').selectedIndex=0;g('h-campos').innerHTML='';g('btn-hist').disabled=true;}
 }
@@ -555,6 +563,7 @@ function openAfiliadoEdit(){
   EDITANDO_ID=AFILIADO_ACTIVO.id;
   g('m-afil-title').textContent='✏️ Editar Afiliado';
   g('m-afil-sub').textContent=`${AFILIADO_ACTIVO.nombres} ${AFILIADO_ACTIVO.apellidos}`;
+  g('btn-del-afil').style.display='inline-block';
   const m=AFILIADO_ACTIVO;
   const toISO=s=>{if(!s||!s.includes('/'))return s||'';const[d,mo,y]=s.split('/');return`${y}-${mo}-${d}`;};
   g('a-nomb').value=m.nombres||''; g('a-apel').value=m.apellidos||'';
@@ -572,6 +581,23 @@ function calcEdad(){
   const h=new Date();let a=h.getFullYear()-fn.getFullYear();
   if(h.getMonth()-fn.getMonth()<0||(h.getMonth()-fn.getMonth()===0&&h.getDate()<fn.getDate()))a--;
   g('edad-val').textContent=a;g('edad-hint').hidden=false;
+}
+
+async function eliminarAfiliado(){
+  if(!EDITANDO_ID||!AFILIADO_ACTIVO) return;
+  const nombre=`${AFILIADO_ACTIVO.nombres} ${AFILIADO_ACTIVO.apellidos}`;
+  if(!confirm(`¿Estás seguro de que querés eliminar a ${nombre}?\n\nEsta acción no se puede deshacer.`)) return;
+  const btn=g('btn-del-afil'); btn.disabled=true; btn.textContent='Eliminando...';
+  try{
+    const r=await fetch(`/api/afiliados/${EDITANDO_ID}`,{method:'DELETE'});
+    const res=await r.json();
+    if(r.ok){
+      toast(`✅ ${res.mensaje}`,'ok');
+      closeModal('m-afil');
+      cargarAfiliados(CLUB_ACTIVO.id);
+    } else toast(`❌ ${res.error}`,'err');
+  }catch(e){ toast('❌ Error de conexión.','err'); }
+  finally{ btn.disabled=false; btn.textContent='🗑 Eliminar'; }
 }
 
 async function enviarAfiliado(){
