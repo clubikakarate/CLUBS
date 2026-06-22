@@ -250,6 +250,13 @@ def registrar():
              d["ciudad_nacimiento"].strip(),parse_fecha(d["fecha_nacimiento"]),
              d["genero"].strip(),hash_val(d["cedula"]),
              d["ciudad_residencia"].strip(),club_id))
+        # Auditoría
+        cur.execute("""INSERT INTO auditoria (admin_id, admin_nombre, accion, tabla, detalle)
+                       SELECT NULL, 'Club: ' || nombre, 'INSERT', 'miembros',
+                              %s || ' | Cédula: ' || %s
+                       FROM clubs WHERE id=%s""",
+                    (d["nombres"].strip()+" "+d["apellidos"].strip(),
+                     d["cedula"].strip(), club_id))
         conn.commit()
         return jsonify({"ok":True,"mensaje":"Afiliado registrado correctamente."})
     except Exception as e:
@@ -279,6 +286,15 @@ def editar_afiliado(socio_id):
              parse_fecha(d["fecha_ingreso"]),d["categoria"].strip(),
              d["ciudad_nacimiento"].strip(),parse_fecha(d["fecha_nacimiento"]),
              d["genero"].strip(),d["ciudad_residencia"].strip(),socio_id))
+        # Auditoría
+        cur.execute("""INSERT INTO auditoria (admin_id, admin_nombre, accion, tabla, detalle)
+                       SELECT NULL, 'Club: ' || c.nombre, 'UPDATE', 'miembros',
+                              %s || ' | Cédula: ' || %s
+                       FROM clubs c
+                       JOIN miembros m ON m.club_id = c.id
+                       WHERE m.id = %s""",
+                    (d["nombres"].strip()+" "+d["apellidos"].strip(),
+                     d["cedula"].strip(), socio_id))
         conn.commit()
         return jsonify({"ok":True,"mensaje":"Afiliado actualizado."})
     except Exception as e:
@@ -288,6 +304,38 @@ def editar_afiliado(socio_id):
         return jsonify({"error":str(e)}), 500
     finally:
         release(conn)
+
+# ── Eliminar afiliado ─────────────────────────────────────────────────────
+@app.route("/api/afiliados/<int:socio_id>", methods=["DELETE"])
+def eliminar_afiliado(socio_id):
+    conn = None
+    try:
+        conn = get_conn(); cur = conn.cursor()
+        # Obtener datos antes de borrar para auditoría
+        cur.execute("""SELECT m.nombres, m.apellidos, m.cedula, c.nombre
+                       FROM miembros m
+                       LEFT JOIN clubs c ON c.id = m.club_id
+                       WHERE m.id=%s""", (socio_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "Afiliado no encontrado."}), 404
+        nombres, apellidos, cedula, club_nombre = row
+        cur.execute("DELETE FROM miembros WHERE id=%s", (socio_id,))
+        # Auditoría
+        cur.execute("""INSERT INTO auditoria (admin_id, admin_nombre, accion, tabla, detalle)
+                       VALUES (NULL, %s, 'DELETE', 'miembros', %s)""",
+                    (f"Club: {club_nombre or 'desconocido'}",
+                     f"{nombres} {apellidos} | Cédula: {cedula}"))
+        conn.commit()
+        return jsonify({"ok": True, "mensaje": f"{nombres} {apellidos} eliminado correctamente."})
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        logger.error("eliminar_afiliado: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        release(conn)
+
 
 # ── Plantillas ─────────────────────────────────────────────────────────────
 @app.route("/api/plantillas")
